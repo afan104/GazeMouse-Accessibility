@@ -15,11 +15,20 @@ class MouseController:
         cellHeight,
         screenWidth,
         screenHeight,
+        xEyeRange=None,
+        yEyeRange=None,
     ):
         self.xcoeffs = xcoeffs
         self.ycoeffs = ycoeffs
         self.gaze = gaze
         self.webcam = webcam
+
+        # the pupil-position range seen during calibration; readings are
+        # clamped to this before the fit is evaluated, since the fit was
+        # only ever validated inside this range and a quadratic can blow
+        # up fast just outside it
+        self.xEyeRange = xEyeRange
+        self.yEyeRange = yEyeRange
 
         self.cellWidth = cellWidth
         self.cellHeight = cellHeight
@@ -65,11 +74,13 @@ class MouseController:
                     (left_pupil[1] + right_pupil[1]) / 2,
                 ]
                 smoothedAvg = self.movingAverage(eyegaze)
+                eyeX = self._clampToRange(smoothedAvg[0], self.xEyeRange)
+                eyeY = self._clampToRange(smoothedAvg[1], self.yEyeRange)
                 xPixel = (
                     np.clip(
                         int(
-                            self.xcoeffs[0] * smoothedAvg[0] ** 2
-                            + self.xcoeffs[1] * smoothedAvg[0]
+                            self.xcoeffs[0] * eyeX**2
+                            + self.xcoeffs[1] * eyeX
                             + self.xcoeffs[2]
                         ),
                         0,
@@ -81,8 +92,8 @@ class MouseController:
                 yPixel = (
                     np.clip(
                         int(
-                            self.ycoeffs[0] * smoothedAvg[1] ** 2
-                            + self.ycoeffs[1] * smoothedAvg[1]
+                            self.ycoeffs[0] * eyeY**2
+                            + self.ycoeffs[1] * eyeY
                             + self.ycoeffs[2]
                         ),
                         0,
@@ -95,6 +106,11 @@ class MouseController:
 
         self.webcam.release()
         cv2.destroyAllWindows()
+
+    def _clampToRange(self, value, valueRange):
+        if valueRange is None:
+            return value
+        return np.clip(value, valueRange[0], valueRange[1])
 
     def movingAverage(self, eyeGaze):
         self.xDataFrame.append(eyeGaze[0])

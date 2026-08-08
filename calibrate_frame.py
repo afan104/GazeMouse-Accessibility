@@ -270,6 +270,11 @@ class CalibrateScreen(tk.Frame):
         # calculate polyfit
         self.app.xcoeff = np.polyfit(x_eye, x_pixel, 2)
         self.app.ycoeff = np.polyfit(y_eye, y_pixel, 2)
+
+        # the range actually seen during calibration, so MouseController
+        # can clamp live readings and avoid extrapolating past it
+        self.app.xEyeRange = (float(x_eye.min()), float(x_eye.max()))
+        self.app.yEyeRange = (float(y_eye.min()), float(y_eye.max()))
         print(x_eye)
         print(y_eye)
         print(x_pixel)

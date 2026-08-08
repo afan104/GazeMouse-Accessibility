@@ -19,6 +19,7 @@ class EyeTrackingApp(tk.Tk):
         self.root.title("Eye Tracking App")
 
         self.xcoeff, self.ycoeff = None, None
+        self.xEyeRange, self.yEyeRange = None, None
 
         # Define styles
         self.style = ttk.Style(theme=theme)
@@ -76,6 +77,10 @@ class EyeTrackingApp(tk.Tk):
     def get_coeffs(self):
         return self.xcoeff, self.ycoeff
 
+    # get the calibrated eye-position ranges from CalibrateScreen
+    def get_eye_ranges(self):
+        return self.xEyeRange, self.yEyeRange
+
 
 if __name__ == "__main__":
     cellWidth = 20
@@ -90,6 +95,7 @@ if __name__ == "__main__":
     app = EyeTrackingApp(root, gaze, webcam)
     root.mainloop()
     xcoeff, ycoeff = app.get_coeffs()
+    xEyeRange, yEyeRange = app.get_eye_ranges()
 
     # Start tracking
     if np.all(xcoeff is not None) and np.all(ycoeff is not None):
@@ -102,6 +108,8 @@ if __name__ == "__main__":
             cellHeight,
             screenWidth,
             screenHeight,
+            xEyeRange,
+            yEyeRange,
         )
 
     webcam.release()

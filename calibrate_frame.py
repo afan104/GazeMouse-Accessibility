@@ -46,16 +46,15 @@ class CalibrateScreen(tk.Frame):
         self.dotSize = 20
         self.currentPosition = 0
         self.dotPositions = [
-            (0.5, 0.05),  # Top-left corner
-            (0.5, 0.25),
+            (0.05, 0.05),  # Top-left
+            (0.5, 0.05),  # Top-center
+            (0.95, 0.05),  # Top-right
+            (0.05, 0.5),  # Center-left
             (0.5, 0.5),  # Center
-            (0.5, 0.75),
-            (0.5, 0.95),  # Top-right corner
-            (0.05, 0.5),  # Bottom-left corner
-            (0.25, 0.5),
-            (0.5, 0.5),
-            (0.75, 0.5),
-            (0.95, 0.5),  # Bottom-right corner
+            (0.95, 0.5),  # Center-right
+            (0.05, 0.95),  # Bottom-left
+            (0.5, 0.95),  # Bottom-center
+            (0.95, 0.95),  # Bottom-right
         ]
         self.eyeData = [[] for _ in range(len(self.dotPositions))]
         self.dotShowing = False
@@ -233,52 +232,49 @@ class CalibrateScreen(tk.Frame):
         # if self.gazeThread.is_alive():
         #     self.gazeThread.join()
 
-    # dotPositions is a cross: indices 5-9 vary in x (y held at center),
-    # indices 0-4 vary in y (x held at center). Fitting each axis against
-    # only its own varying dots keeps head-movement noise from the other
-    # axis's dots out of the fit.
-    X_FIT_DOTS = [5, 6, 7, 8, 9]
-    Y_FIT_DOTS = [0, 1, 2, 3, 4]
-
     # dots are drawn inset from the screen edge (0.05-0.95, not 0.0-1.0) so
     # they're fully visible during calibration. The fit targets are rescaled
-    # so the outermost dot still teaches the true screen edge, not a point
+    # so the outermost dots still teach the true screen edge, not a point
     # 5% short of it -- otherwise, once live readings are clamped to the
     # calibrated range, the cursor can never reach the actual edge.
     DOT_MARGIN = 0.05
 
-    def _axis_fit_data(self, dot_indices, grid_size, eye_index, pixel_index):
-        """Builds (eye_positions, pixel_targets) for one axis, using only
-        the dots whose target actually varies along that axis."""
-        eye_values = []
-        pixel_values = []
+    def _rescale(self, fraction):
         span = 1 - 2 * self.DOT_MARGIN
-        for i in dot_indices:
-            fraction = (self.dotPositions[i][pixel_index] - self.DOT_MARGIN) / span
-            target = int(fraction * grid_size)
-            for sample in self.eyeData[i]:
-                eye_values.append(sample[eye_index])
-                pixel_values.append(target)
-        return np.array(eye_values), np.array(pixel_values)
+        return (fraction - self.DOT_MARGIN) / span
 
     def calculateFunctionGrid(self):
-        # setup grid
+        """Fits x_pixel and y_pixel as a joint surface over both gaze ratios
+        (horizontal_ratio, vertical_ratio), using every calibration dot in
+        the 3x3 grid -- including the corners -- rather than fitting each
+        axis independently. Diagonal gaze (e.g. top-right) isn't guaranteed
+        to be the simple sum of independent horizontal and vertical
+        behavior, so it needs to be directly represented in the fit."""
         gridWidth = self.screenWidth // self.cellWidth
         gridHeight = self.screenHeight // self.cellHeight
 
-        x_eye, x_pixel = self._axis_fit_data(self.X_FIT_DOTS, gridWidth, eye_index=0, pixel_index=0)
-        y_eye, y_pixel = self._axis_fit_data(self.Y_FIT_DOTS, gridHeight, eye_index=1, pixel_index=1)
+        ratioX, ratioY, targetX, targetY = [], [], [], []
+        for i, (xFrac, yFrac) in enumerate(self.dotPositions):
+            pixelX = int(self._rescale(xFrac) * gridWidth)
+            pixelY = int(self._rescale(yFrac) * gridHeight)
+            for sample in self.eyeData[i]:
+                ratioX.append(sample[0])
+                ratioY.append(sample[1])
+                targetX.append(pixelX)
+                targetY.append(pixelY)
 
-        # calculate polyfit
-        self.app.xcoeff = np.polyfit(x_eye, x_pixel, 2)
-        self.app.ycoeff = np.polyfit(y_eye, y_pixel, 2)
+        ratioX = np.array(ratioX)
+        ratioY = np.array(ratioY)
+
+        # quadratic surface: 1, x, y, x^2, y^2, x*y
+        design = np.column_stack(
+            [np.ones_like(ratioX), ratioX, ratioY, ratioX**2, ratioY**2, ratioX * ratioY]
+        )
+        self.app.xcoeff, *_ = np.linalg.lstsq(design, np.array(targetX), rcond=None)
+        self.app.ycoeff, *_ = np.linalg.lstsq(design, np.array(targetY), rcond=None)
 
         # the range actually seen during calibration, so MouseController
         # can clamp live readings and avoid extrapolating past it
-        self.app.xEyeRange = (float(x_eye.min()), float(x_eye.max()))
-        self.app.yEyeRange = (float(y_eye.min()), float(y_eye.max()))
-        print(x_eye)
-        print(y_eye)
-        print(x_pixel)
-        print(y_pixel)
+        self.app.xEyeRange = (float(ratioX.min()), float(ratioX.max()))
+        self.app.yEyeRange = (float(ratioY.min()), float(ratioY.max()))
         print(f"{self.app.xcoeff}, {self.app.ycoeff}")

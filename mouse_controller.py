@@ -71,11 +71,7 @@ class MouseController:
                 eyeY = self._clampToRange(smoothedAvg[1], self.yEyeRange)
                 xPixel = (
                     np.clip(
-                        int(
-                            self.xcoeffs[0] * eyeX**2
-                            + self.xcoeffs[1] * eyeX
-                            + self.xcoeffs[2]
-                        ),
+                        int(self._evaluateSurface(self.xcoeffs, eyeX, eyeY)),
                         0,
                         self.gridWidth - 1,
                     )
@@ -84,11 +80,7 @@ class MouseController:
                 )
                 yPixel = (
                     np.clip(
-                        int(
-                            self.ycoeffs[0] * eyeY**2
-                            + self.ycoeffs[1] * eyeY
-                            + self.ycoeffs[2]
-                        ),
+                        int(self._evaluateSurface(self.ycoeffs, eyeX, eyeY)),
                         0,
                         self.gridHeight - 1,
                     )
@@ -104,6 +96,18 @@ class MouseController:
         if valueRange is None:
             return value
         return np.clip(value, valueRange[0], valueRange[1])
+
+    def _evaluateSurface(self, coeffs, x, y):
+        """Evaluates the quadratic surface fit from calculateFunctionGrid:
+        coeffs are in [1, x, y, x^2, y^2, x*y] order."""
+        return (
+            coeffs[0]
+            + coeffs[1] * x
+            + coeffs[2] * y
+            + coeffs[3] * x**2
+            + coeffs[4] * y**2
+            + coeffs[5] * x * y
+        )
 
     def movingAverage(self, eyeGaze):
         self.xDataFrame.append(eyeGaze[0])

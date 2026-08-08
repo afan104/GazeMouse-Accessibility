@@ -27,9 +27,8 @@ class MouseController:
         self.webcam = webcam
 
         # the pupil-position range seen during calibration; readings are
-        # clamped to this before the fit is evaluated, since the fit was
-        # only ever validated inside this range and a quadratic can blow
-        # up fast just outside it
+        # clamped to this before interpolating, as an extra guard on top
+        # of the NearestNDInterpolator fallback in _evaluateSurface
         self.xEyeRange = xEyeRange
         self.yEyeRange = yEyeRange
 
@@ -102,17 +101,17 @@ class MouseController:
             return value
         return np.clip(value, valueRange[0], valueRange[1])
 
-    def _evaluateSurface(self, coeffs, x, y):
-        """Evaluates the quadratic surface fit from calculateFunctionGrid:
-        coeffs are in [1, x, y, x^2, y^2, x*y] order."""
-        return (
-            coeffs[0]
-            + coeffs[1] * x
-            + coeffs[2] * y
-            + coeffs[3] * x**2
-            + coeffs[4] * y**2
-            + coeffs[5] * x * y
-        )
+    def _evaluateSurface(self, interpolators, x, y):
+        """Evaluates the piecewise-linear scattered interpolation from
+        calculateFunctionGrid: interpolators is (LinearNDInterpolator,
+        NearestNDInterpolator), the second used as a fallback when (x, y)
+        falls outside the convex hull of the calibration points, where
+        LinearNDInterpolator returns NaN."""
+        linear, nearest = interpolators
+        value = linear(x, y)
+        if np.isnan(value):
+            value = nearest(x, y)
+        return float(value)
 
     def smooth(self, eyeGaze):
         timestamp = time.time()

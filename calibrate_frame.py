@@ -5,6 +5,7 @@ import threading
 import pyautogui
 import numpy as np
 import time
+from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 
 
 class CalibrateScreen(tk.Frame):
@@ -237,64 +238,62 @@ class CalibrateScreen(tk.Frame):
         span = 1 - 2 * self.DOT_MARGIN
         return (fraction - self.DOT_MARGIN) / span
 
-    # Ridge regularization strength for the surface fit. With only 9
-    # calibration dots feeding a 6-parameter quadratic surface, and a real
-    # gaze-ratio range that's often much narrower than the idealized 0-1
-    # scale, plain least-squares can produce huge, unstable coefficients
-    # (a small change in input gets wildly amplified) -- that shows up as
-    # both jitter and erratic behavior near the edges. A small ridge
-    # penalty tames that with only a minor accuracy cost.
-    RIDGE_ALPHA = 0.1
-
-    def _ridge_fit(self, design, targets):
-        n_features = design.shape[1]
-        normal = design.T @ design + self.RIDGE_ALPHA * np.eye(n_features)
-        return np.linalg.solve(normal, design.T @ targets)
-
     def calculateFunctionGrid(self):
-        """Fits x_pixel and y_pixel as a joint surface over both gaze ratios
-        (horizontal_ratio, vertical_ratio), using every calibration dot in
-        the 3x3 grid -- including the corners -- rather than fitting each
-        axis independently. Diagonal gaze (e.g. top-right) isn't guaranteed
-        to be the simple sum of independent horizontal and vertical
-        behavior, so it needs to be directly represented in the fit."""
+        """Maps gaze ratios (horizontal_ratio, vertical_ratio) to screen
+        position using piecewise-linear scattered interpolation
+        (scipy.interpolate.LinearNDInterpolator) over the 9 calibration
+        dots' mean ratio readings, instead of fitting a parametric
+        polynomial surface.
+
+        A parametric quadratic surface was tried first (6-term, then a
+        full 9-term biquadratic tensor basis) and rejected: the real
+        per-dot ratio data is tight and low-noise (std ~0.01-0.02), but the
+        9-point system is severely ill-conditioned (condition number in
+        the millions) even for a matched 9-parameter basis, so any exact
+        or near-exact fit at the calibration points oscillated wildly
+        *between* them -- verified this produced predictions wildly
+        outside the valid screen range at points a person would actually
+        look at during normal use, not just at extreme corners.
+        LinearNDInterpolator (Delaunay triangulation + linear
+        interpolation) is exact at all 9 calibration points by
+        construction and mathematically cannot overshoot between them,
+        since each interpolated value is a weighted average of its
+        triangle's three vertices."""
         gridWidth = self.screenWidth // self.cellWidth
         gridHeight = self.screenHeight // self.cellHeight
 
-        ratioX, ratioY, targetX, targetY = [], [], [], []
+        dotRatios, dotTargetsX, dotTargetsY = [], [], []
         print(f"gridWidth={gridWidth}, gridHeight={gridHeight}")
         for i, (xFrac, yFrac) in enumerate(self.dotPositions):
             pixelX = int(self._rescale(xFrac) * gridWidth)
             pixelY = int(self._rescale(yFrac) * gridHeight)
             dotRatioX = [sample[0] for sample in self.eyeData[i]]
             dotRatioY = [sample[1] for sample in self.eyeData[i]]
-            if dotRatioX:
-                print(
-                    f"dot {i} @ screen({xFrac},{yFrac}) -> target({pixelX},{pixelY}): "
-                    f"n={len(dotRatioX)} "
-                    f"ratioX mean={np.mean(dotRatioX):.3f} std={np.std(dotRatioX):.3f} "
-                    f"ratioY mean={np.mean(dotRatioY):.3f} std={np.std(dotRatioY):.3f}"
-                )
-            for sample in self.eyeData[i]:
-                ratioX.append(sample[0])
-                ratioY.append(sample[1])
-                targetX.append(pixelX)
-                targetY.append(pixelY)
+            if not dotRatioX:
+                continue
+            meanX, meanY = float(np.mean(dotRatioX)), float(np.mean(dotRatioY))
+            print(
+                f"dot {i} @ screen({xFrac},{yFrac}) -> target({pixelX},{pixelY}): "
+                f"n={len(dotRatioX)} "
+                f"ratioX mean={meanX:.3f} std={np.std(dotRatioX):.3f} "
+                f"ratioY mean={meanY:.3f} std={np.std(dotRatioY):.3f}"
+            )
+            dotRatios.append((meanX, meanY))
+            dotTargetsX.append(pixelX)
+            dotTargetsY.append(pixelY)
 
-        ratioX = np.array(ratioX)
-        ratioY = np.array(ratioY)
-
-        # quadratic surface: 1, x, y, x^2, y^2, x*y
-        design = np.column_stack(
-            [np.ones_like(ratioX), ratioX, ratioY, ratioX**2, ratioY**2, ratioX * ratioY]
+        points = np.array(dotRatios)
+        self.app.xcoeff = (
+            LinearNDInterpolator(points, np.array(dotTargetsX, dtype=float)),
+            NearestNDInterpolator(points, np.array(dotTargetsX, dtype=float)),
         )
-        self.app.xcoeff = self._ridge_fit(design, np.array(targetX))
-        self.app.ycoeff = self._ridge_fit(design, np.array(targetY))
+        self.app.ycoeff = (
+            LinearNDInterpolator(points, np.array(dotTargetsY, dtype=float)),
+            NearestNDInterpolator(points, np.array(dotTargetsY, dtype=float)),
+        )
 
         # the range actually seen during calibration, so MouseController
         # can clamp live readings and avoid extrapolating past it
-        self.app.xEyeRange = (float(ratioX.min()), float(ratioX.max()))
-        self.app.yEyeRange = (float(ratioY.min()), float(ratioY.max()))
+        self.app.xEyeRange = (float(points[:, 0].min()), float(points[:, 0].max()))
+        self.app.yEyeRange = (float(points[:, 1].min()), float(points[:, 1].max()))
         print(f"ratioX range: {self.app.xEyeRange}, ratioY range: {self.app.yEyeRange}")
-        print(f"xcoeff: {self.app.xcoeff}")
-        print(f"ycoeff: {self.app.ycoeff}")

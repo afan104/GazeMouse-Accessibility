@@ -1,3 +1,5 @@
+         
+
 # Changelog
 
 Record of bugs found and fixes made while getting the app running and improving
@@ -90,6 +92,7 @@ outside it: evaluating a few pixels past the calibrated range produced
 predictions far outside the valid grid, which `np.clip()` then pinned to a
 screen edge. Any detector jitter or drift past the calibrated range got
 slammed to that edge and stayed there. Fixed two ways:
+
 1. `CalibrateScreen` now records the min/max eye position seen per axis
    during calibration; `MouseController` clamps live readings to that range
    *before* evaluating the polynomial, so noise past the calibrated range
@@ -199,6 +202,7 @@ erratic everywhere else -- and any residual filter noise gets massively
 amplified by those huge coefficients before it ever reaches the cursor.
 
 Fixed two ways:
+
 1. Added ridge regularization to the surface fit (`RIDGE_ALPHA = 0.1`).
    Tested alpha values from 0.001 to 20 against synthetic narrow-range data:
    0.1 cuts peak coefficient magnitude by roughly half to two-thirds while
@@ -310,11 +314,31 @@ samples around 0.45, 16 glitch samples around 0.08, ~26% contamination):
 the mean gets dragged to 0.35, while the median stays at 0.434, close to
 the true clean-cluster center.
 
-**Added click support: space bar clicks during mouse control.** The cv2
-preview window (`MouseController.startController`) already reads keyboard
-input via `cv2.waitKey` for the ESC-to-stop check, so the same check now
-also triggers `pyautogui.click()` on space (ASCII 32). No new window or
-input handling needed.
+**Added click support: space bar clicks during mouse control, then
+replaced with dwell-click.** First pass: the cv2 preview window
+(`MouseController.startController`) already reads keyboard input via
+`cv2.waitKey` for the ESC-to-stop check, so the same check also triggered
+`pyautogui.click()` on space (ASCII 32).
+
+This broke as soon as it left the preview window: `cv2.waitKey` only sees
+key presses while our own window has OS keyboard focus. Once the gaze
+cursor was used to click into another app (e.g. TextEdit), focus followed
+there, so pressing space typed a literal space into the document instead
+of clicking. Binding a different key wouldn't have fixed this -- any key
+would leak into whatever app has focus the same way, just as a different
+stray character. It's also a poor fit for the project's actual mission: a
+tool built for people who can't reliably use a mouse shouldn't then
+require a reliable keyboard press to click.
+
+Replaced with dwell-click, the standard mechanism in real eye-tracking
+assistive software (Tobii Dynavox, EyeMine, etc): hold the cursor within
+`DWELL_RADIUS=25px` of a spot for `DWELL_SECONDS=1.0s` and it clicks
+automatically, no keyboard involved, driven entirely by the cursor
+position already being tracked. Verified the dwell state machine with
+mocked timestamps: fires exactly once per dwell period, resets correctly
+when the cursor moves away and returns, and small in-radius jitter
+(+/-5px, well under the threshold) doesn't reset the timer or cause extra
+clicks.
 
 ## Still open
 

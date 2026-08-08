@@ -240,13 +240,22 @@ class CalibrateScreen(tk.Frame):
     X_FIT_DOTS = [5, 6, 7, 8, 9]
     Y_FIT_DOTS = [0, 1, 2, 3, 4]
 
+    # dots are drawn inset from the screen edge (0.05-0.95, not 0.0-1.0) so
+    # they're fully visible during calibration. The fit targets are rescaled
+    # so the outermost dot still teaches the true screen edge, not a point
+    # 5% short of it -- otherwise, once live readings are clamped to the
+    # calibrated range, the cursor can never reach the actual edge.
+    DOT_MARGIN = 0.05
+
     def _axis_fit_data(self, dot_indices, grid_size, eye_index, pixel_index):
         """Builds (eye_positions, pixel_targets) for one axis, using only
         the dots whose target actually varies along that axis."""
         eye_values = []
         pixel_values = []
+        span = 1 - 2 * self.DOT_MARGIN
         for i in dot_indices:
-            target = int(self.dotPositions[i][pixel_index] * grid_size)
+            fraction = (self.dotPositions[i][pixel_index] - self.DOT_MARGIN) / span
+            target = int(fraction * grid_size)
             for sample in self.eyeData[i]:
                 eye_values.append(sample[eye_index])
                 pixel_values.append(target)

@@ -98,9 +98,19 @@ class MouseController:
                         self.gridHeight - 1,
                     )
                     * self.cellHeight
-                    + self.cellWidth / 2
+                    + self.cellHeight / 2
                 )
-                pyautogui.moveTo(xPixel, yPixel)  # move to point on screen
+                try:
+                    pyautogui.moveTo(xPixel, yPixel)  # move to point on screen
+                except pyautogui.FailSafeException:
+                    # Our own targets are always inset from the screen edge
+                    # (never an exact corner), so this means the real cursor
+                    # was already at a corner when we tried to move it --
+                    # most likely the user grabbed their physical mouse or
+                    # trackpad. Treat that the same as pressing Escape:
+                    # relinquish control instead of crashing the app.
+                    print("Fail-safe corner touched, stopping mouse control.")
+                    break
 
         self.webcam.release()
         cv2.destroyAllWindows()

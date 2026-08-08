@@ -1,6 +1,10 @@
+import time
+
 import cv2
 import pyautogui
 import numpy as np
+
+from one_euro_filter import OneEuroFilter
 
 
 class MouseController:
@@ -37,10 +41,12 @@ class MouseController:
         self.gridWidth = screenWidth // cellWidth
         self.gridHeight = screenHeight // cellHeight
 
-        # Moving average
-        self.xDataFrame = []
-        self.yDataFrame = []
-        self.avgFrames = 3
+        # One Euro Filter: smooths heavily when the gaze signal is nearly
+        # still (jitter), and less as it speeds up (avoids lag on
+        # deliberate moves). beta controls how much cutoff increases with
+        # speed -- tune here based on how it feels in practice.
+        self._xFilter = OneEuroFilter(min_cutoff=1.0, beta=0.5)
+        self._yFilter = OneEuroFilter(min_cutoff=1.0, beta=0.5)
 
         self.startController()
 
@@ -65,7 +71,7 @@ class MouseController:
             # Get normalized gaze ratios (0.0-1.0, robust to head position)
             if self.gaze.pupils_located:
                 eyegaze = [self.gaze.horizontal_ratio(), self.gaze.vertical_ratio()]
-                smoothedAvg = self.movingAverage(eyegaze)
+                smoothedAvg = self.smooth(eyegaze)
                 eyeX = self._clampToRange(smoothedAvg[0], self.xEyeRange)
                 eyeY = self._clampToRange(smoothedAvg[1], self.yEyeRange)
                 xPixel = (
@@ -108,14 +114,12 @@ class MouseController:
             + coeffs[5] * x * y
         )
 
-    def movingAverage(self, eyeGaze):
-        self.xDataFrame.append(eyeGaze[0])
-        if len(self.xDataFrame) > self.avgFrames:
-            self.xDataFrame.pop(0)
-        self.yDataFrame.append(eyeGaze[1])
-        if len(self.yDataFrame) > self.avgFrames:
-            self.yDataFrame.pop(0)
-        return [np.mean(self.xDataFrame), np.mean(self.yDataFrame)]
+    def smooth(self, eyeGaze):
+        timestamp = time.time()
+        return [
+            self._xFilter.filter(eyeGaze[0], timestamp),
+            self._yFilter.filter(eyeGaze[1], timestamp),
+        ]
 
 
 # # GRAVITATE MOUSE TOWARD CLICKABLE ITEMS (NOT INTEGRATED)

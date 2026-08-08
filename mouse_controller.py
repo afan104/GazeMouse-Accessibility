@@ -56,10 +56,22 @@ class MouseController:
         self._xFilter = OneEuroFilter(min_cutoff=0.15, beta=1.0)
         self._yFilter = OneEuroFilter(min_cutoff=0.15, beta=1.0)
 
+        # Dwell-click: hold the cursor within DWELL_RADIUS pixels of where
+        # a dwell started for DWELL_SECONDS to trigger a click. No keyboard
+        # involved -- a bound key only works while our own preview window
+        # has focus, so it breaks (or leaks a keystroke into whatever app
+        # you're actually looking at) the moment you click into another
+        # app, which defeats the point of a hands-free tool anyway.
+        self.DWELL_RADIUS = 25
+        self.DWELL_SECONDS = 1.0
+        self._dwellPosition = None
+        self._dwellStart = None
+        self._dwellFired = False
+
         self.startController()
 
     def startController(self):
-        windowName = "Eye Tracking (ESC to stop, SPACE to click)"
+        windowName = "Eye Tracking (ESC to stop, dwell to click)"
         controlMouse = True
         while controlMouse:
             # We get a new frame from the webcam
@@ -71,13 +83,10 @@ class MouseController:
             self.gaze.refresh(frame)
 
             # Show a live preview; this also gives cv2.waitKey below an
-            # actual window to read key presses from.
+            # actual window to read the ESC key press from.
             cv2.imshow(windowName, self.gaze.annotated_frame())
-            key = cv2.waitKey(1)
-            if key == 27:  # ESC
+            if cv2.waitKey(1) == 27:  # ESC
                 break
-            elif key == 32:  # SPACE
-                pyautogui.click()
 
             # Get normalized gaze ratios (0.0-1.0, robust to head position)
             if self.gaze.pupils_located:
@@ -115,8 +124,24 @@ class MouseController:
                     print("Fail-safe corner touched, stopping mouse control.")
                     break
 
+                self._checkDwellClick(xPixel, yPixel)
+
         self.webcam.release()
         cv2.destroyAllWindows()
+
+    def _checkDwellClick(self, xPixel, yPixel):
+        now = time.time()
+        if self._dwellPosition is None or (
+            np.hypot(xPixel - self._dwellPosition[0], yPixel - self._dwellPosition[1])
+            > self.DWELL_RADIUS
+        ):
+            # moved away from the current dwell spot -- start a new one
+            self._dwellPosition = (xPixel, yPixel)
+            self._dwellStart = now
+            self._dwellFired = False
+        elif not self._dwellFired and (now - self._dwellStart) >= self.DWELL_SECONDS:
+            pyautogui.click()
+            self._dwellFired = True  # don't re-click every frame while still
 
     def _clampToRange(self, value, valueRange):
         if valueRange is None:

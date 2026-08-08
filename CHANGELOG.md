@@ -118,6 +118,33 @@ so the cursor topped out at ~95% of the way to every edge. Fixed by rescaling
 the fit targets so the outermost dot (still drawn inset, for visibility) is
 taught as the true edge (grid index 0 or max), not 95% of the way there.
 
+**Couldn't reach top-right or bottom-left.** Two compounding causes:
+
+1. `vertical_ratio()` was noticeably noisier at extreme upward gaze than
+   anywhere else -- grouping the top calibration dot's samples showed a
+   0.30-0.61 spread, nearly half the entire calibration's dynamic range,
+   versus 0.1-0.2 for every other dot. Likely the upper eyelid partially
+   covering the visible pupil/iris when looking up, a known limitation of
+   visible-spectrum (non-IR) webcam pupil tracking, not a code bug.
+2. The deeper issue: `dotPositions` was a cross (5 dots vary in x, 5 vary in
+   y), and x/y were fit completely independently (see the axis-separated
+   fit above). That assumes gaze decomposes additively into independent
+   horizontal and vertical components -- so true diagonal positions like
+   top-right were never actually measured during calibration, only assumed
+   from combining the separate x and y fits. If that assumption doesn't
+   hold (plausible, especially combined with #1's noise at the top), any
+   diagonal corner is wrong even though each axis looks fine on its own.
+
+Fixed by replacing the cross with a real 3x3 grid (all 4 corners + edge
+midpoints + center), and replacing the two independent quadratic fits with
+a single bivariate quadratic surface (basis: `1, x, y, x^2, y^2, x*y`) fit
+via least squares for both `x_pixel` and `y_pixel`. Every dot, corners
+included, now directly contributes to both outputs, so diagonal gaze is
+directly calibrated rather than assumed. Verified with synthetic data
+(including a deliberately injected nonlinear x/y coupling term) that the
+surface fit correctly reproduces diagonal corners that the old independent
+fits structurally couldn't represent.
+
 ## Still open
 
 - **Still some jitter.** Expected, given this is visible-spectrum webcam
@@ -125,11 +152,6 @@ taught as the true edge (grid index 0 or max), not 95% of the way there.
   3-frame moving average in `MouseController.movingAverage` already smooths
   some of it. Increasing `avgFrames` would smooth further at the cost of
   more lag. Not addressed yet -- ask if you want it tuned.
-- **`dotPositions` is a cross, not a grid.** The x-fit only ever sees eye
-  positions from looking left/right through screen-center, and the y-fit
-  only sees up/down through center. A proper corner/grid layout would give
-  a true 2D calibration instead of two independent 1D ones. Not yet
-  addressed.
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,
   1 low) in dependencies. See
   `https://github.com/afan104/GazeMouse-Accessibility/security/dependabot`.

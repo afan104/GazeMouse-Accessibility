@@ -59,7 +59,7 @@ class MouseController:
         self.startController()
 
     def startController(self):
-        windowName = "Eye Tracking (press ESC to stop)"
+        windowName = "Eye Tracking (ESC to stop, SPACE to click)"
         controlMouse = True
         while controlMouse:
             # We get a new frame from the webcam
@@ -71,10 +71,13 @@ class MouseController:
             self.gaze.refresh(frame)
 
             # Show a live preview; this also gives cv2.waitKey below an
-            # actual window to read the ESC key press from.
+            # actual window to read key presses from.
             cv2.imshow(windowName, self.gaze.annotated_frame())
-            if cv2.waitKey(1) == 27:
+            key = cv2.waitKey(1)
+            if key == 27:  # ESC
                 break
+            elif key == 32:  # SPACE
+                pyautogui.click()
 
             # Get normalized gaze ratios (0.0-1.0, robust to head position)
             if self.gaze.pupils_located:

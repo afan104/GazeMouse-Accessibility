@@ -271,14 +271,18 @@ class CalibrateScreen(tk.Frame):
             dotRatioY = [sample[1] for sample in self.eyeData[i]]
             if not dotRatioX:
                 continue
-            meanX, meanY = float(np.mean(dotRatioX)), float(np.mean(dotRatioY))
+            # median, not mean -- a handful of glitch frames (a blink, a
+            # momentary detection failure) can badly skew a mean without
+            # showing up as an obviously invalid sample, but the median
+            # stays anchored to the majority of good frames
+            anchorX, anchorY = float(np.median(dotRatioX)), float(np.median(dotRatioY))
             print(
                 f"dot {i} @ screen({xFrac},{yFrac}) -> target({pixelX},{pixelY}): "
                 f"n={len(dotRatioX)} "
-                f"ratioX mean={meanX:.3f} std={np.std(dotRatioX):.3f} "
-                f"ratioY mean={meanY:.3f} std={np.std(dotRatioY):.3f}"
+                f"ratioX median={anchorX:.3f} std={np.std(dotRatioX):.3f} "
+                f"ratioY median={anchorY:.3f} std={np.std(dotRatioY):.3f}"
             )
-            dotRatios.append((meanX, meanY))
+            dotRatios.append((anchorX, anchorY))
             dotTargetsX.append(pixelX)
             dotTargetsY.append(pixelY)
 

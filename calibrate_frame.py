@@ -262,9 +262,19 @@ class CalibrateScreen(tk.Frame):
         gridHeight = self.screenHeight // self.cellHeight
 
         ratioX, ratioY, targetX, targetY = [], [], [], []
+        print(f"gridWidth={gridWidth}, gridHeight={gridHeight}")
         for i, (xFrac, yFrac) in enumerate(self.dotPositions):
             pixelX = int(self._rescale(xFrac) * gridWidth)
             pixelY = int(self._rescale(yFrac) * gridHeight)
+            dotRatioX = [sample[0] for sample in self.eyeData[i]]
+            dotRatioY = [sample[1] for sample in self.eyeData[i]]
+            if dotRatioX:
+                print(
+                    f"dot {i} @ screen({xFrac},{yFrac}) -> target({pixelX},{pixelY}): "
+                    f"n={len(dotRatioX)} "
+                    f"ratioX mean={np.mean(dotRatioX):.3f} std={np.std(dotRatioX):.3f} "
+                    f"ratioY mean={np.mean(dotRatioY):.3f} std={np.std(dotRatioY):.3f}"
+                )
             for sample in self.eyeData[i]:
                 ratioX.append(sample[0])
                 ratioY.append(sample[1])

@@ -63,16 +63,9 @@ class MouseController:
             if cv2.waitKey(1) == 27:
                 break
 
-            # Get pupil Data
-            left_pupil = self.gaze.pupil_left_coords()
-            right_pupil = self.gaze.pupil_right_coords()
-
-            if left_pupil and right_pupil:
-                # Process pupil data and get pixels
-                eyegaze = [
-                    (left_pupil[0] + right_pupil[0]) / 2,
-                    (left_pupil[1] + right_pupil[1]) / 2,
-                ]
+            # Get normalized gaze ratios (0.0-1.0, robust to head position)
+            if self.gaze.pupils_located:
+                eyegaze = [self.gaze.horizontal_ratio(), self.gaze.vertical_ratio()]
                 smoothedAvg = self.movingAverage(eyegaze)
                 eyeX = self._clampToRange(smoothedAvg[0], self.xEyeRange)
                 eyeY = self._clampToRange(smoothedAvg[1], self.yEyeRange)

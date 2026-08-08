@@ -209,19 +209,12 @@ class CalibrateScreen(tk.Frame):
                     break
                 self.gaze.refresh(frame)
 
-                left_pupil = self.gaze.pupil_left_coords()
-                right_pupil = self.gaze.pupil_right_coords()
-
-                if (
-                    left_pupil
-                    and right_pupil
-                    and self.currentPosition < len(self.dotPositions)
+                if self.gaze.pupils_located and self.currentPosition < len(
+                    self.dotPositions
                 ):
-                    # Record the average gaze position
-                    avgGaze = [
-                        (left_pupil[0] + right_pupil[0]) / 2,
-                        (left_pupil[1] + right_pupil[1]) / 2,
-                    ]
+                    # Record the normalized gaze ratios (0.0-1.0, robust to
+                    # head position) instead of raw pupil pixel coordinates
+                    avgGaze = [self.gaze.horizontal_ratio(), self.gaze.vertical_ratio()]
                     with self.lock:
                         self.eyeData[self.currentPosition].append(avgGaze)
             else:

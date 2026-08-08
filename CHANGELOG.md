@@ -256,6 +256,27 @@ bottom-right specifically improved to 1.2 and 5.6 cells off.
 `RIDGE_ALPHA` and the ridge-fit helper are gone; regularization doesn't
 apply to this approach.
 
+**Cursor sometimes jumped to halfway across the screen at an edge, then
+came back.** Retested after the interpolation fix: all four corners now
+reachable, jitter much improved, but this new pattern showed up, distinct
+from steady small jitter. The One Euro Filter alone can't fix it, and
+actually makes it worse in one specific way: it's speed-adaptive by
+design, so a single-frame outlier (a blink, a momentary MediaPipe landmark
+glitch) looks identical to fast deliberate movement, which *lowers*
+smoothing rather than raising it -- so the cursor visibly jumps toward the
+spike, then decays back over several frames as the filter catches up.
+
+Added `median_filter.py` (`MedianFilter`, window=3) as a pre-stage before
+the One Euro Filter. A median is robust to a single wild sample in a way a
+low-pass filter isn't: it just returns the middle value of the recent
+window, so one outlier among otherwise-normal samples gets ignored rather
+than blended in. Verified with synthetic data: injecting a single-frame
+spike (0.5 -> 0.9) into an otherwise steady signal, the One-Euro-only
+pipeline reproduced the reported pattern exactly (jump to 0.621, decaying
+0.599 -> 0.59 -> 0.582 -> 0.57 over subsequent frames); with the median
+pre-filter, the same spike is almost entirely absorbed (max deviation from
+baseline 0.001 vs 0.121).
+
 ## Still open
 
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,

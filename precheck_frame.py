@@ -10,7 +10,6 @@ calibration, even if the check hasn't passed.
 from collections import deque
 
 import cv2
-import numpy as np
 import tkinter as tk
 import ttkbootstrap as ttk
 from PIL import Image, ImageTk
@@ -21,7 +20,6 @@ class PreCheckScreen(tk.Frame):
     MIN_SAMPLES = 15
     PUPIL_SUCCESS_THRESHOLD = 0.6
     GLARE_MAX_FRACTION = 0.3
-    GLARE_PIXEL_THRESHOLD = 245
     DARK_MIN_MEAN = 40
 
     def __init__(self, window, gazeObject, camObject, app, on_continue):
@@ -59,29 +57,6 @@ class PreCheckScreen(tk.Frame):
         self.running = True
         self.update_frame()
 
-    def _eye_brightness_stats(self):
-        """Returns (mean_brightness, glare_fraction) across both isolated eye
-        regions, or None if neither eye is currently detected."""
-        eyes = [
-            eye
-            for eye in (self.gaze.eye_left, self.gaze.eye_right)
-            if eye is not None and eye.frame is not None and eye.frame.size
-        ]
-        if not eyes:
-            return None
-
-        means, glare_fractions = [], []
-        for eye in eyes:
-            pixels = eye.frame[eye.frame > 0]  # ignore the masked-out background
-            if pixels.size == 0:
-                continue
-            means.append(float(np.mean(pixels)))
-            glare_fractions.append(float(np.mean(pixels > self.GLARE_PIXEL_THRESHOLD)))
-
-        if not means:
-            return None
-        return sum(means) / len(means), max(glare_fractions)
-
     def update_frame(self):
         if not self.running:
             return
@@ -91,7 +66,7 @@ class PreCheckScreen(tk.Frame):
             self.gaze.refresh(frame)
 
             self.pupil_hits.append(self.gaze.pupils_located)
-            stats = self._eye_brightness_stats()
+            stats = self.gaze.eye_brightness_stats()
             self.glare_hits.append(stats is not None and stats[1] > self.GLARE_MAX_FRACTION)
             self.dark_hits.append(stats is not None and stats[0] < self.DARK_MIN_MEAN)
 

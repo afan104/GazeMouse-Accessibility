@@ -11,6 +11,7 @@ step), which is both more precise and more stable frame to frame.
 
 import cv2
 import mediapipe as mp
+import numpy as np
 
 
 class IrisGazeTracking:
@@ -81,6 +82,32 @@ class IrisGazeTracking:
         _, vLeft = self._eye_ratios(self.LEFT_EYE)
         _, vRight = self._eye_ratios(self.RIGHT_EYE)
         return (vLeft + vRight) / 2
+
+    def eye_brightness_stats(self):
+        """Returns (mean_brightness, glare_fraction) across both eye
+        regions in the current frame, or None if no face is detected.
+        Used by PreCheckScreen for the lighting/glare check."""
+        if not self.pupils_located or self.frame is None:
+            return None
+
+        gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+        height, width = gray.shape[:2]
+
+        means, glare_fractions = [], []
+        for eye in (self.LEFT_EYE, self.RIGHT_EYE):
+            xs = [self._landmarks[eye[k]].x for k in ("outer", "inner", "top", "bottom")]
+            ys = [self._landmarks[eye[k]].y for k in ("outer", "inner", "top", "bottom")]
+            x1, x2 = int(min(xs) * width), int(max(xs) * width)
+            y1, y2 = int(min(ys) * height), int(max(ys) * height)
+            region = gray[y1:y2, x1:x2]
+            if region.size == 0:
+                continue
+            means.append(float(np.mean(region)))
+            glare_fractions.append(float(np.mean(region > 245)))
+
+        if not means:
+            return None
+        return sum(means) / len(means), max(glare_fractions)
 
     def annotated_frame(self):
         """Returns the main frame with the detected iris centers marked"""

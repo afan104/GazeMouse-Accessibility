@@ -224,7 +224,6 @@ class CalibrateScreen(tk.Frame):
                     ]
                     with self.lock:
                         self.eyeData[self.currentPosition].append(avgGaze)
-                        print(self.eyeData)
             else:
                 time.sleep(0.1)
         print("done")

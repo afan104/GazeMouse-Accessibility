@@ -240,26 +240,32 @@ class CalibrateScreen(tk.Frame):
         # if self.gazeThread.is_alive():
         #     self.gazeThread.join()
 
+    # dotPositions is a cross: indices 5-9 vary in x (y held at center),
+    # indices 0-4 vary in y (x held at center). Fitting each axis against
+    # only its own varying dots keeps head-movement noise from the other
+    # axis's dots out of the fit.
+    X_FIT_DOTS = [5, 6, 7, 8, 9]
+    Y_FIT_DOTS = [0, 1, 2, 3, 4]
+
+    def _axis_fit_data(self, dot_indices, grid_size, eye_index, pixel_index):
+        """Builds (eye_positions, pixel_targets) for one axis, using only
+        the dots whose target actually varies along that axis."""
+        eye_values = []
+        pixel_values = []
+        for i in dot_indices:
+            target = int(self.dotPositions[i][pixel_index] * grid_size)
+            for sample in self.eyeData[i]:
+                eye_values.append(sample[eye_index])
+                pixel_values.append(target)
+        return np.array(eye_values), np.array(pixel_values)
+
     def calculateFunctionGrid(self):
         # setup grid
         gridWidth = self.screenWidth // self.cellWidth
         gridHeight = self.screenHeight // self.cellHeight
 
-        # stack the eye data for each dot
-        data = np.vstack(self.eyeData)
-        x_eye = data[:, 0]
-        y_eye = data[:, 1]
-
-        # stack the targets data
-        targets = []
-        for i in range(len(self.dotPositions)):
-            xPix = int(self.dotPositions[i][0] * gridWidth)  # x
-            yPix = int(self.dotPositions[i][1] * gridHeight)  # y
-            for j in range(len(self.eyeData[i])):
-                targets.append([xPix, yPix])
-        targets = np.array(targets)
-        x_pixel = np.array(targets[:, 0])
-        y_pixel = np.array(targets[:, 1])
+        x_eye, x_pixel = self._axis_fit_data(self.X_FIT_DOTS, gridWidth, eye_index=0, pixel_index=0)
+        y_eye, y_pixel = self._axis_fit_data(self.Y_FIT_DOTS, gridHeight, eye_index=1, pixel_index=1)
 
         # calculate polyfit
         self.app.xcoeff = np.polyfit(x_eye, x_pixel, 2)

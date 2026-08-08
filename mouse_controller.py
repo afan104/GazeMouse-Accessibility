@@ -1,5 +1,4 @@
 import cv2
-from GazeTracking.gaze_tracking import GazeTracking
 import pyautogui
 import numpy as np
 

@@ -6,7 +6,7 @@ from precheck_frame import PreCheckScreen
 from mouse_controller import MouseController
 import pyautogui
 import cv2
-from GazeTracking.gaze_tracking import GazeTracking
+from iris_gaze_tracking import IrisGazeTracking
 import numpy as np
 
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     screenWidth = pyautogui.size()[0]
     screenHeight = pyautogui.size()[1]
 
-    gaze = GazeTracking()
+    gaze = IrisGazeTracking()
     webcam = cv2.VideoCapture(0)
 
     root = tk.Tk()

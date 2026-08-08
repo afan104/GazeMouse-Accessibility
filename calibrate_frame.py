@@ -1,10 +1,4 @@
-"""
-Demonstration of the GazeTracking library.
-Check the README.md for complete documentation.
-"""
-
 import cv2
-from GazeTracking.gaze_tracking import GazeTracking
 import tkinter as tk
 import ttkbootstrap as ttk
 import threading

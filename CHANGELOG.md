@@ -210,10 +210,51 @@ Fixed two ways:
    roughly 3x more at-rest smoothing while tracking fast deliberate moves
    just as well.
 
-Not yet retested live against real hardware after this round -- the
-diagnostic print in `calculateFunctionGrid` now shows the actual calibrated
-ratio range and coefficients, so if jitter or edge-reach issues persist,
-that output should show whether the range is still the limiting factor.
+Retested live: jitter improved a lot (user reported "pretty happy with it"),
+but a new pattern emerged -- confident, accurate control on the left side,
+but top-right and bottom-right still unreachable, then on a further test
+only the top-left corner was reliably reachable at all.
+
+**Root cause: the polynomial surface fit was the wrong model, not just
+poorly regularized.** The per-dot diagnostic added above gave the answer.
+The actual calibration data was clean: tight, low-noise (std 0.007-0.02),
+and consistent across repeated dots at the same screen position -- so the
+earlier "noisy narrow-range data" theory was wrong. Evaluating the
+regularized 6-term fit at its own 9 training points showed it was
+systematically bad specifically at the 4 corners (errors up to -21 grid
+cells) while edges and center fit fine. Reason: a single `x*y` cross term
+can't fully capture the real 2D coupling between the two gaze ratios --
+confirmed directly, since the *same* screen y-position produced measurably
+different mean `vertical_ratio` depending on which x-position dot it was
+(e.g. top-left's ratioY mean 0.505 vs top-right's 0.451, both nominally
+"top" dots).
+
+Tried a full 9-term biquadratic tensor basis next (matched exactly to the
+3x3 grid: 9 parameters for 9 points). Fit to the 9 clean per-dot means, it
+reproduced all 9 targets exactly, as expected for a square, well-posed
+system. But the system turned out severely ill-conditioned (condition
+number ~15.8 million), and evaluating it at points *between* calibration
+dots gave wildly wrong answers -- a point that should have interpolated to
+a simple midpoint predicted -63.5 instead. An exact-fit polynomial through
+9 points can oscillate arbitrarily between them; this is a textbook case of
+that failure mode, and it would have made the cursor behave unpredictably
+everywhere except the 9 exact calibration positions.
+
+**Fixed by replacing parametric polynomial fitting with
+`scipy.interpolate.LinearNDInterpolator`** (Delaunay triangulation +
+piecewise-linear interpolation) over the 9 per-dot mean ratio readings,
+with `NearestNDInterpolator` as a fallback for points outside the convex
+hull of the calibration data. This is exact at all 9 calibration points by
+construction, and mathematically cannot overshoot between them -- each
+interpolated value is a weighted average of its enclosing triangle's three
+vertices, so it's bounded by nearby real measurements, not by an arbitrary
+curve fit. Verified end-to-end with the real reported per-dot statistics:
+all 9 positions (corners included) now predict within 1-6 grid cells of
+target, versus up to 21 cells off with the polynomial fit -- top-right and
+bottom-right specifically improved to 1.2 and 5.6 cells off.
+
+`RIDGE_ALPHA` and the ridge-fit helper are gone; regularization doesn't
+apply to this approach.
 
 ## Still open
 

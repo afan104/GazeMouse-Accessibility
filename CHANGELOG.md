@@ -310,6 +310,12 @@ samples around 0.45, 16 glitch samples around 0.08, ~26% contamination):
 the mean gets dragged to 0.35, while the median stays at 0.434, close to
 the true clean-cluster center.
 
+**Added click support: space bar clicks during mouse control.** The cv2
+preview window (`MouseController.startController`) already reads keyboard
+input via `cv2.waitKey` for the ESC-to-stop check, so the same check now
+also triggers `pyautogui.click()` on space (ASCII 32). No new window or
+input handling needed.
+
 ## Still open
 
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,

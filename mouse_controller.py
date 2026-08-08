@@ -37,17 +37,22 @@ class MouseController:
         self.startController()
 
     def startController(self):
+        windowName = "Eye Tracking (press ESC to stop)"
         controlMouse = True
         while controlMouse:
-            if cv2.waitKey(1) == 27:
-                controlMouse = False
-                break
-
             # We get a new frame from the webcam
-            _, frame = self.webcam.read()
+            ret, frame = self.webcam.read()
+            if not ret or frame is None:
+                break
 
             # We send this frame to GazeTracking to analyze it
             self.gaze.refresh(frame)
+
+            # Show a live preview; this also gives cv2.waitKey below an
+            # actual window to read the ESC key press from.
+            cv2.imshow(windowName, self.gaze.annotated_frame())
+            if cv2.waitKey(1) == 27:
+                break
 
             # Get pupil Data
             left_pupil = self.gaze.pupil_left_coords()

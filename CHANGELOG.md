@@ -105,8 +105,26 @@ slammed to that edge and stayed there. Fixed two ways:
    instead of a 20-65px sliver -- the same absolute jitter now moves the
    cursor proportionally much less.
 
+**Cursor could reach all four corners but stopped short of the actual edges.**
+A side effect of the clamp fix above. `dotPositions` draws the outermost dots
+at 0.05/0.95 screen-fraction, not 0.0/1.0, so they render fully on screen
+instead of being clipped at the boundary. But `calculateFunctionGrid` used
+that same 0.05/0.95 fraction directly as the fit *target*, so the mapping
+only ever learned "this eye reading = 95% of the way to the edge." Before the
+clamp fix, the polynomial could extrapolate a bit past that to reach the true
+edge (messily -- see the stuck-at-an-edge bugs above); after clamping live
+readings to the calibrated range, that extrapolation was no longer possible,
+so the cursor topped out at ~95% of the way to every edge. Fixed by rescaling
+the fit targets so the outermost dot (still drawn inset, for visibility) is
+taught as the true edge (grid index 0 or max), not 95% of the way there.
+
 ## Still open
 
+- **Still some jitter.** Expected, given this is visible-spectrum webcam
+  pupil tracking rather than an IR-based or deep-learning gaze model; the
+  3-frame moving average in `MouseController.movingAverage` already smooths
+  some of it. Increasing `avgFrames` would smooth further at the cost of
+  more lag. Not addressed yet -- ask if you want it tuned.
 - **`dotPositions` is a cross, not a grid.** The x-fit only ever sees eye
   positions from looking left/right through screen-center, and the y-fit
   only sees up/down through center. A proper corner/grid layout would give

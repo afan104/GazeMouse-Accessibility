@@ -2,6 +2,7 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from calibrate_frame import CalibrateScreen
+from precheck_frame import PreCheckScreen
 from mouse_controller import MouseController
 import pyautogui
 import cv2
@@ -58,6 +59,13 @@ class EyeTrackingApp(tk.Tk):
         ).pack(pady=5)
 
     def calibration_screen(self, event=None):
+        # Clear the screen
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        # Check camera angle/lighting before calibration
+        PreCheckScreen(self.root, self.gaze, self.webcam, self, self.start_calibration)
+
+    def start_calibration(self):
         # Clear the screen
         for widget in self.root.winfo_children():
             widget.destroy()

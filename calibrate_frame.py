@@ -25,6 +25,7 @@ class CalibrateScreen(tk.Frame):
 
         # Keybinds
         self.window.bind("<space>", self.dot_on)
+        self.window.bind("<Escape>", self.handle_escape)
 
         # screen size info
         self.width = window.winfo_screenwidth()
@@ -161,21 +162,33 @@ class CalibrateScreen(tk.Frame):
                     self.create_dot(self.currentPosition, fill="red")
                 else:
                     self.calibrate = False
-                    self.window.attributes("-fullscreen", False)
-                    self.window.destroy()
-                    self.exit_fullscreen()
+                    self.canvas.update_idletasks()  # render the green dot before we close
+                    self.window.after(400, self.finish_calibration)
             elif self.failCollection < 10:
                 print("not enough data collected, waiting...")
                 self.failCollection += 1
                 self.window.after(500, self.dot_off)
             else:
-                print("Failed calibration. Please try again with different lighting.")
-                self.calibrate = False
-                self.window.attributes("-fullscreen", False)
-                self.window.destroy()
-                self.webcam.release()
-                cv2.destroyAllWindows()
-                self.exit_fullscreen()
+                print("Not enough data collected for this dot. Retrying, press space to try again.")
+                self.collectData = False
+                self.dotShowing = False
+                self.failCollection = 0
+                self.eyeData[self.currentPosition] = []
+                self.create_dot(self.currentPosition, fill="red")
+
+    def finish_calibration(self):
+        self.window.attributes("-fullscreen", False)
+        self.window.destroy()
+        self.exit_fullscreen()
+
+    def handle_escape(self, event=None):
+        """Aborts calibration early without computing coefficients from partial data."""
+        self.calibrate = False
+        self.collectData = False
+        self.window.unbind("<space>")
+        self.window.unbind("<Escape>")
+        self.window.attributes("-fullscreen", False)
+        self.window.destroy()
 
     def track_gaze(self):
         """
@@ -236,7 +249,7 @@ class CalibrateScreen(tk.Frame):
         # stack the eye data for each dot
         data = np.vstack(self.eyeData)
         x_eye = data[:, 0]
-        y_eye = x_eye = data[:, 1]
+        y_eye = data[:, 1]
 
         # stack the targets data
         targets = []

@@ -342,6 +342,21 @@ clicks.
 
 ## Still open
 
+- **Trouble moving smoothly along the bottom edge.** Reported after the
+  dwell-click round: instead of tracking continuously along the bottom of
+  the screen, the cursor tends to snap to either dead center or a corner
+  and stay there. Not yet diagnosed. A plausible starting theory given how
+  the mapping works now (`LinearNDInterpolator` over just 9 calibration
+  points -- see the "polynomial-to-interpolation" entry above): the
+  Delaunay triangulation connecting the bottom-row dots to the center-row
+  dots may produce large or thin triangles along that edge, and
+  barycentric interpolation is only well-behaved *within* a triangle -- a
+  point near a shared vertex can flip which triangle it's considered part
+  of with a small input change, snapping the output toward that vertex
+  (a corner or the center dot) rather than sliding smoothly. Unconfirmed;
+  needs the same per-dot diagnostic + reasoning-from-data approach used
+  for the earlier corner-reach issues, not a guess. Picking this back up
+  later.
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,
   1 low) in dependencies. See
   `https://github.com/afan104/GazeMouse-Accessibility/security/dependabot`.

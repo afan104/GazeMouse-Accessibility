@@ -277,6 +277,39 @@ pipeline reproduced the reported pattern exactly (jump to 0.621, decaying
 pre-filter, the same spike is almost entirely absorbed (max deviation from
 baseline 0.001 vs 0.121).
 
+**App crashed outright with `pyautogui.FailSafeException`.** Worked well
+initially, then crashed with a full traceback out of `startController`.
+Checked PyAutoGUI's actual implementation: `failSafeCheck()` compares the
+*current* cursor position against the four exact screen corners before
+every `moveTo` call. Our own targets can never land exactly on a corner --
+`grid_index * cellWidth + cellWidth / 2` always insets by at least half a
+cell -- so this had to be triggered by something outside our calculation,
+most likely the user's actual mouse or trackpad touching a corner.
+
+Rather than disable the failsafe (explicitly not recommended, and it's a
+reasonable safety mechanism to keep), wrapped the `moveTo` call in
+`try/except pyautogui.FailSafeException` and treat it the same as pressing
+Escape: stop the tracking loop cleanly instead of crashing. For an
+assistive tool like this, "grab your real mouse to override" is a sensible
+thing to support, not just an error to suppress.
+
+Also fixed a one-line bug noticed while touching this code: `yPixel`'s
+offset used `self.cellWidth / 2` instead of `self.cellHeight / 2`.
+Harmless today since both happen to be 20, but wrong if they're ever set
+differently.
+
+**`dot 6` (bottom-left) had wildly noisier data than every other dot** --
+`ratioY std=0.357`, roughly 15-50x every other dot's std (0.006-0.024).
+Consistent with a chunk of glitch frames during that dot's collection (a
+blink, or a momentary detection failure at an extreme downward gaze
+angle). Since `LinearNDInterpolator` treats each dot's summary statistic
+as an exact anchor point, a contaminated *mean* directly corrupts that
+whole region of the interpolated surface. Switched from mean to median.
+Verified with synthetic data matching this contamination pattern (45 clean
+samples around 0.45, 16 glitch samples around 0.08, ~26% contamination):
+the mean gets dragged to 0.35, while the median stays at 0.434, close to
+the true clean-cluster center.
+
 ## Still open
 
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,

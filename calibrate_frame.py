@@ -237,6 +237,20 @@ class CalibrateScreen(tk.Frame):
         span = 1 - 2 * self.DOT_MARGIN
         return (fraction - self.DOT_MARGIN) / span
 
+    # Ridge regularization strength for the surface fit. With only 9
+    # calibration dots feeding a 6-parameter quadratic surface, and a real
+    # gaze-ratio range that's often much narrower than the idealized 0-1
+    # scale, plain least-squares can produce huge, unstable coefficients
+    # (a small change in input gets wildly amplified) -- that shows up as
+    # both jitter and erratic behavior near the edges. A small ridge
+    # penalty tames that with only a minor accuracy cost.
+    RIDGE_ALPHA = 0.1
+
+    def _ridge_fit(self, design, targets):
+        n_features = design.shape[1]
+        normal = design.T @ design + self.RIDGE_ALPHA * np.eye(n_features)
+        return np.linalg.solve(normal, design.T @ targets)
+
     def calculateFunctionGrid(self):
         """Fits x_pixel and y_pixel as a joint surface over both gaze ratios
         (horizontal_ratio, vertical_ratio), using every calibration dot in
@@ -264,11 +278,13 @@ class CalibrateScreen(tk.Frame):
         design = np.column_stack(
             [np.ones_like(ratioX), ratioX, ratioY, ratioX**2, ratioY**2, ratioX * ratioY]
         )
-        self.app.xcoeff, *_ = np.linalg.lstsq(design, np.array(targetX), rcond=None)
-        self.app.ycoeff, *_ = np.linalg.lstsq(design, np.array(targetY), rcond=None)
+        self.app.xcoeff = self._ridge_fit(design, np.array(targetX))
+        self.app.ycoeff = self._ridge_fit(design, np.array(targetY))
 
         # the range actually seen during calibration, so MouseController
         # can clamp live readings and avoid extrapolating past it
         self.app.xEyeRange = (float(ratioX.min()), float(ratioX.max()))
         self.app.yEyeRange = (float(ratioY.min()), float(ratioY.max()))
-        print(f"{self.app.xcoeff}, {self.app.ycoeff}")
+        print(f"ratioX range: {self.app.xEyeRange}, ratioY range: {self.app.yEyeRange}")
+        print(f"xcoeff: {self.app.xcoeff}")
+        print(f"ycoeff: {self.app.ycoeff}")

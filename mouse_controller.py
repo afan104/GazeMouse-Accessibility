@@ -45,8 +45,8 @@ class MouseController:
         # still (jitter), and less as it speeds up (avoids lag on
         # deliberate moves). beta controls how much cutoff increases with
         # speed -- tune here based on how it feels in practice.
-        self._xFilter = OneEuroFilter(min_cutoff=1.0, beta=0.5)
-        self._yFilter = OneEuroFilter(min_cutoff=1.0, beta=0.5)
+        self._xFilter = OneEuroFilter(min_cutoff=0.15, beta=1.0)
+        self._yFilter = OneEuroFilter(min_cutoff=0.15, beta=1.0)
 
         self.startController()
 

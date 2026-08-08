@@ -145,14 +145,83 @@ directly calibrated rather than assumed. Verified with synthetic data
 surface fit correctly reproduces diagonal corners that the old independent
 fits structurally couldn't represent.
 
+## MediaPipe iris tracking rework (branch: `mediapipe-iris-tracking`)
+
+The fixes above got calibration and mapping correct given the input signal
+available, but the input signal itself (dlib + Haar cascade pupil detection)
+has a real ceiling: coarse threshold-and-centroid pupil localization, no
+head-pose awareness, visible-spectrum only. The goal for this branch: push
+eye-tracking as far as it can go, rather than defaulting to a head-tracking
+input model (a different, more robust approach for other reasons -- see the
+design discussion in the branch history for the tradeoffs; this repo commits
+to eye tracking specifically).
+
+**Replaced dlib+Haar pupil detection with MediaPipe iris landmarks.**
+`iris_gaze_tracking.py` wraps MediaPipe Face Mesh (`refine_landmarks=True`,
+which adds real iris-center landmarks, not just eyelid contour points) and
+exposes the same interface as the old `GazeTracking` class
+(`refresh`/`pupils_located`/`horizontal_ratio`/`vertical_ratio`/`annotated_frame`),
+so `calibrate_frame.py` and `mouse_controller.py` needed no logic changes,
+only `app.py`'s instantiation swapped. Ratios are computed as the iris
+center's position within each eye's corner-to-corner bounding box (landmarks
+33/133/159/145 for the right eye, 263/362/386/374 for the left; iris
+centers at 468/473), averaged across both eyes. Pinned `mediapipe==0.10.14`
+specifically -- 1.0.0 removed the `solutions.face_mesh` API in favor of a
+Tasks API that needs a separately downloaded model file, unneeded complexity
+here.
+
+**PreCheckScreen broke under the new tracker.** Its glare/darkness check
+reached into `gaze.eye_left`/`gaze.eye_right`, internals specific to the old
+`GazeTracking` class's isolated-eye-crop objects, which `IrisGazeTracking`
+doesn't have. Moved that logic into the tracker interface itself
+(`eye_brightness_stats()`), so `PreCheckScreen` no longer needs to know which
+tracker implementation is behind `self.gaze`.
+
+**Jitter: replaced the flat moving average with a One Euro Filter.** The
+old 3-frame average weighted all samples equally and couldn't adapt to how
+fast the signal was moving -- a fixed tradeoff between jitter and lag. Added
+`one_euro_filter.py`, implementing the 1-euro filter (Casiez, Roussel,
+Vogel, CHI 2012), the standard adaptive filter for noisy pointing signals:
+heavy smoothing when the signal is nearly still, progressively less as it
+speeds up. Verified with synthetic data: at-rest jitter (std 0.02) reduced
+to std 0.0064 with the initial parameters (`min_cutoff=1.0, beta=0.5`).
+
+**Real calibration produced huge, unstable fit coefficients (magnitudes in
+the thousands).** This directly explained two symptoms reported after
+testing: the cursor still jittered noticeably despite the new filter, and it
+had trouble reaching the right edge specifically (while top-left/bottom-left
+worked). Root cause: with only 9 calibration dots feeding a 6-parameter
+quadratic surface, and a real MediaPipe ratio range likely narrower than the
+idealized 0-1 scale, the surface's basis columns (`1, x, y, x^2, y^2, x*y`)
+become nearly collinear, so plain least-squares produces a wildly
+oscillating fit that's exactly correct at the 9 training points but
+erratic everywhere else -- and any residual filter noise gets massively
+amplified by those huge coefficients before it ever reaches the cursor.
+
+Fixed two ways:
+1. Added ridge regularization to the surface fit (`RIDGE_ALPHA = 0.1`).
+   Tested alpha values from 0.001 to 20 against synthetic narrow-range data:
+   0.1 cuts peak coefficient magnitude by roughly half to two-thirds while
+   keeping corner/edge predictions within ~5% of the true target -- higher
+   alpha reduces coefficients further but starts meaningfully hurting
+   accuracy at the calibration points themselves.
+2. Increased the One Euro Filter's baseline smoothing
+   (`min_cutoff: 1.0 -> 0.15`, `beta: 0.5 -> 1.0`), verified this gives
+   roughly 3x more at-rest smoothing while tracking fast deliberate moves
+   just as well.
+
+Not yet retested live against real hardware after this round -- the
+diagnostic print in `calculateFunctionGrid` now shows the actual calibrated
+ratio range and coefficients, so if jitter or edge-reach issues persist,
+that output should show whether the range is still the limiting factor.
+
 ## Still open
 
-- **Still some jitter.** Expected, given this is visible-spectrum webcam
-  pupil tracking rather than an IR-based or deep-learning gaze model; the
-  3-frame moving average in `MouseController.movingAverage` already smooths
-  some of it. Increasing `avgFrames` would smooth further at the cost of
-  more lag. Not addressed yet -- ask if you want it tuned.
 - **Dependabot flagged 31 vulnerabilities** (1 critical, 20 high, 9 moderate,
   1 low) in dependencies. See
   `https://github.com/afan104/GazeMouse-Accessibility/security/dependabot`.
   Deferred by request.
+- **No head-pose correction.** MediaPipe exposes all 468 face landmarks
+  publicly (unlike GazeTracking), so `cv2.solvePnP`-based head-pose
+  correction is realistic to add here if movement tolerance still isn't
+  good enough after the fixes above. Not started.

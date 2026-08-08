@@ -5,6 +5,7 @@ import pyautogui
 import numpy as np
 
 from one_euro_filter import OneEuroFilter
+from median_filter import MedianFilter
 
 
 class MouseController:
@@ -39,6 +40,14 @@ class MouseController:
 
         self.gridWidth = screenWidth // cellWidth
         self.gridHeight = screenHeight // cellHeight
+
+        # Median filter first: rejects single-frame outlier spikes (a
+        # blink, a momentary detection glitch) that the One Euro Filter
+        # alone would treat as fast deliberate movement and smooth less,
+        # not more -- that's what caused the cursor to jump toward a
+        # spike and slowly decay back instead of just ignoring it.
+        self._xMedian = MedianFilter(window=3)
+        self._yMedian = MedianFilter(window=3)
 
         # One Euro Filter: smooths heavily when the gaze signal is nearly
         # still (jitter), and less as it speeds up (avoids lag on
@@ -114,10 +123,12 @@ class MouseController:
         return float(value)
 
     def smooth(self, eyeGaze):
+        medianX = self._xMedian.filter(eyeGaze[0])
+        medianY = self._yMedian.filter(eyeGaze[1])
         timestamp = time.time()
         return [
-            self._xFilter.filter(eyeGaze[0], timestamp),
-            self._yFilter.filter(eyeGaze[1], timestamp),
+            self._xFilter.filter(medianX, timestamp),
+            self._yFilter.filter(medianY, timestamp),
         ]
 
 
